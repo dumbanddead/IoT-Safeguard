@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IoT Security Dashboard</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Cytoscape for richer topology rendering -->
+    <script src="https://unpkg.com/cytoscape@3.23.0/dist/cytoscape.min.js"></script>
+</head>
+<body>
+    <div class="dashboard-container">
+        <!-- Header -->
+        <header class="header">
+            <div class="header-content">
+                <div class="header-left">
+                    <h1 class="brand">IoT Security Dashboard</h1>
+                </div>
+                <div class="header-right">
+                    <div class="header-info">
+                        <span class="live-indicator">
+                            <span class="live-dot"></span>
+                            LIVE MONITORING
+                        </span>
+                        <span class="timestamp" id="timestamp"></span>
+                        <span class="status-indicator online">● System Online</span>
+                        <button id="startTourBtn" class="btn btn-primary" style="font-size: 11px; padding: 6px 12px; margin-left: 8px;">🎯 Guided Tour</button>
+                        <button id="themeToggle" class="btn" title="Toggle theme">🌙</button>
+                        <a href="/logout" class="btn" style="margin-left:8px;">Logout</a>
+                    </div>
+        </header>
+
+        <!-- Main Layout -->
+        <div class="main-layout">
+            <!-- Sidebar Navigation -->
+            <aside class="sidebar">
+                <nav class="nav-menu">
+                    <a href="#" class="nav-item active" data-section="overview" data-tour="nav-overview" title="View system overview and key metrics">
+                        📊 Overview
+                    </a>
+                    <a href="#" class="nav-item" data-section="devices" data-tour="nav-devices" title="Monitor all IoT devices">
+                        📱 Devices
+                    </a>
+                    <a href="#" class="nav-item" data-section="alerts" data-tour="nav-alerts" title="View detected threats and anomalies">
+                        ⚠️ Alerts
+                    </a>
+                    <a href="#" class="nav-item" data-section="topology" data-tour="nav-topology" title="Visualize network topology">
+                        🌐 Topology
+                    </a>
+                    <a href="#" class="nav-item" data-section="firewall" data-tour="nav-firewall" title="Manage firewall rules and policies">
+                        🔥 Firewall Rules
+                    </a>
+                </nav>
+            </aside>
+
+            <!-- Content Area -->
+            <main class="content">
+                <!-- Overview Section -->
+                <section id="overview" class="section active">
+                    <h2>System Overview <span class="tooltip-trigger" data-tooltip="Real-time monitoring of your IoT network security">ℹ️</span></h2>
+                    
+                    <div class="stats-grid" data-tour="stats-grid">
+                        <div class="stat-card" data-tour="stat-devices">
+                            <div class="stat-value" id="stat-total-devices">0</div>
+                            <div class="stat-label">Total Devices</div>
+                        </div>
+                        <div class="stat-card" data-tour="stat-online">
+                            <div class="stat-value" id="stat-online-devices">0</div>
+                            <div class="stat-label">Online Devices</div>
+                        </div>
+                        <div class="stat-card alert" data-tour="stat-blocked">
+                            <div class="stat-value" id="stat-blocked-devices">0</div>
+                            <div class="stat-label">Blocked Devices</div>
+                        </div>
+                        <div class="stat-card alert" data-tour="stat-alerts">
+                            <div class="stat-value" id="stat-active-alerts">0</div>
+                            <div class="stat-label">Active Alerts</div>
+                        </div>
+                    </div>
+
+                    <div class="charts-grid">
+                        <div class="chart-container">
+                            <h3>Device Status Distribution <span class="tooltip-trigger" data-tooltip="Shows breakdown of device statuses">ℹ️</span></h3>
+                            <canvas id="statusChart"></canvas>
+                        </div>
+                        <div class="chart-container">
+                            <h3>Alert Timeline (Last Hour) <span class="tooltip-trigger" data-tooltip="Real-time threat alerts over time">ℹ️</span></h3>
+                            <div id="alertTimeline" class="timeline"></div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Devices Section -->
+                <section id="devices" class="section">
+                    <h2>IoT Devices <span class="tooltip-trigger" data-tooltip="Click on any device to view detailed information">ℹ️</span></h2>
+                    <div class="devices-controls" style="display:flex; gap:10px; align-items:center; margin-bottom:12px;">
+                        <input id="deviceSearch" class="filter-input" placeholder="🔎 Search devices by name, MAC, or IP...">
+                        <select id="deviceSort" class="filter-select">
+                            <option value="">Sort: Default</option>
+                            <option value="online">Online First</option>
+                            <option value="blocked">Blocked First</option>
+                            <option value="traffic_desc">Traffic (High → Low)</option>
+                        </select>
+                    </div>
+                    <div id="devicesContainer" class="devices-grid" data-tour="devices-grid">
+                        <!-- Populated by JavaScript -->
+                    </div>
+                    <div style="text-align:center; margin-top:12px;">
+                        <button id="loadMoreDevices" class="btn">Load more devices</button>
+                    </div>
+
+                    <!-- Device Details Modal -->
+                    <div id="deviceModal" class="modal hidden">
+                        <div class="modal-content device-modal-content">
+                            <span class="close" id="deviceModalClose">&times;</span>
+                            <div class="device-modal-body">
+                                <div class="device-modal-left">
+                                    <img id="deviceModalImage" src="/static/images/unknown.svg" alt="device image" class="device-modal-avatar">
+                                </div>
+                                <div class="device-modal-right">
+                                    <h3 id="deviceModalName">Device</h3>
+                                    <p id="deviceModalMac">MAC: --</p>
+                                    <p id="deviceModalIp">IP: --</p>
+                                    <p id="deviceModalStatus">Status: --</p>
+                                    <p id="deviceModalTraffic">Traffic: --</p>
+                                    <div style="margin-top:12px; display:flex; gap:10px;">
+                                        <button id="deviceModalBlock" class="btn btn-primary">Block</button>
+                                        <button id="deviceModalUnblock" class="btn">Unblock</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Alerts Section -->
+                <section id="alerts" class="section">
+                    <h2>Threat Alerts <span class="tooltip-trigger" data-tooltip="Monitor detected threats and take action">ℹ️</span></h2>
+                    <div class="alerts-toolbar">
+                        <input type="text" id="alertFilter" placeholder="🔍 Filter alerts by threat type or device..." class="filter-input">
+                        <select id="alertStatusFilter" class="filter-select">
+                            <option value="">All Statuses</option>
+                            <option value="active">Active</option>
+                            <option value="resolved">Resolved</option>
+                        </select>
+                    </div>
+                    <div id="alertsContainer" class="alerts-list" data-tour="alerts-list">
+                        <!-- Populated by JavaScript -->
+                    </div>
+                </section>
+
+                <!-- Topology Section -->
+                <section id="topology" class="section">
+                    <h2>Network Topology <span class="tooltip-trigger" data-tooltip="Interactive visualization of your network layout">ℹ️</span></h2>
+                    <div id="topologyContainer" class="topology-view" data-tour="topology-view">
+                        <!-- D3 visualization will be rendered here -->
+                    </div>
+                </section>
+
+                <!-- Firewall Rules Section -->
+                <section id="firewall" class="section">
+                    <h2>Firewall Rules <span class="tooltip-trigger" data-tooltip="Configure network access control policies">ℹ️</span></h2>
+                    <div class="firewall-toolbar">
+                        <button id="addRuleBtn" class="btn btn-primary">+ Add Rule</button>
+                    </div>
+                    <div id="firewallContainer" class="rules-table" data-tour="firewall-rules">
+                        <!-- Populated by JavaScript -->
+                    </div>
+                    
+                    <!-- Add Rule Modal -->
+                    <div id="ruleModal" class="modal hidden">
+                        <div class="modal-content">
+                            <span class="close">&times;</span>
+                            <h3>Add Firewall Rule</h3>
+                            <form id="ruleForm">
+                                <input type="text" id="ruleSrcMac" placeholder="Source MAC" required>
+                                <input type="text" id="ruleDestMac" placeholder="Destination MAC" required>
+                                <select id="ruleAction" required>
+                                    <option value="allow">Allow</option>
+                                    <option value="deny">Deny</option>
+                                </select>
+                                <input type="number" id="rulePriority" placeholder="Priority" value="100" min="0" max="1000">
+                                <button type="submit" class="btn btn-primary">Create Rule</button>
+                            </form>
+                        </div>
+                    </div>
+                </section>
+            </main>
+        </div>
+    </div>
+
+    <!-- Help Panel -->
+    <div class="help-panel" id="helpPanel">
+        <span class="help-panel-close" id="helpPanelClose">✕</span>
+        <h3>📖 Quick Help</h3>
+        <div id="helpContent">
+            <p><strong>Welcome to IoT Security Dashboard!</strong></p>
+            <p>Click "Guided Tour" in the header to learn all features.</p>
+            <p>Hover over ℹ️ icons for contextual help on any section.</p>
+        </div>
+    </div>
+
+    <!-- Help Button -->
+    <button class="help-btn" id="helpBtn" title="Show help panel">?</button>
+    <!-- Theme Toggle Floating Button -->
+    <button id="themeToggle" class="theme-toggle-btn" title="Toggle theme">🌙</button>
+
+    <!-- Notification Container -->
+    <div id="notificationContainer"></div>
+
+    <!-- Backend error overlay shown when API is unreachable or file:// protocol -->
+    <div id="errorOverlay" class="error-overlay hidden">
+        <div class="error-message">
+            <h2>🚧 Dashboard Unavailable</h2>
+            <p>This dashboard requires the Flask backend to be running.</p>
+            <p>Start the server with <code>python dashboard.py</code> and open
+               <a href="http://localhost:5000/">http://localhost:5000/</a> in your browser.</p>
+            <p>Do <strong>not</strong> open the HTML file directly via <code>file://</code>.</p>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='dashboard.js') }}"></script>
+</body>
+</html>
